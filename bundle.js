@@ -4,11 +4,35 @@
 /* Classes */
 const Game = require('./game.js');
 const Player = require('./player.js');
+const Car = require('./car.js');
+const EntityManager = require('./entity-manager.js');
 
 /* Global variables */
 var canvas = document.getElementById('screen');
 var game = new Game(canvas, update, render);
-var player = new Player({x: 0, y: 240})
+var player = new Player({x: 0, y: 240});
+var score = 0;
+var lives = 3;
+var cars = [];
+var entities = new EntityManager(canvas.width, canvas.height, 128);
+var input = {
+  up: false,
+  down: false,
+  left: false,
+  right: false
+};
+player.input = input;
+
+
+entities.addEntity(player);
+for(i=0;i<2;i++) {
+  var carTop = new Car({x: i * 192 + 128, y: i * 128 + 50});
+  var carBot = new Car({x: i * 192 + 128, y: i * 128 + 250});
+  cars.push(carTop);
+  cars.push(carBot);
+  entities.addEntity(carTop);
+  entities.addEntity(carBot);
+}
 
 /**
  * @function masterLoop
@@ -22,6 +46,52 @@ var masterLoop = function(timestamp) {
 masterLoop(performance.now());
 
 
+window.onkeydown = function(event) {
+  switch (event.key) {
+    case "ArrowDown":
+      event.preventDefault();
+      input.down = true;
+      break;
+    case "ArrowUp":
+      event.preventDefault();
+      input.up = true;
+      break;
+    case "ArrowRight":
+      event.preventDefault();
+      input.right = true;
+      break;
+    case "ArrowLeft":
+      event.preventDefault();
+      input.left = true;
+      break;
+    default:
+      return;
+  }
+}
+
+window.onkeyup = function(event) {
+  switch (event.key) {
+    case "ArrowDown":
+      event.preventDefault();
+      input.down = false;
+      break;
+    case "ArrowUp":
+      event.preventDefault();
+      input.up = false;
+      break;
+    case "ArrowRight":
+      event.preventDefault();
+      input.right = false;
+      break;
+    case "ArrowLeft":
+      event.preventDefault();
+      input.left = false;
+      break;
+    default:
+      return;
+  }
+}
+
 /**
  * @function update
  * Updates the game state, moving
@@ -32,7 +102,17 @@ masterLoop(performance.now());
  */
 function update(elapsedTime) {
   player.update(elapsedTime);
+  if(player.x > canvas.width) {
+    score += 1;
+    player.x = 0;
+  }
+  entities.updateEntity(player);
   // TODO: Update the game objects
+  cars.forEach(function(car) {
+    car.update(elapsedTime);
+    entities.updateEntity(car);
+  });
+
 }
 
 /**
@@ -45,10 +125,170 @@ function update(elapsedTime) {
 function render(elapsedTime, ctx) {
   ctx.fillStyle = "lightblue";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.font = "20px Arial";
+  ctx.fillStyle = "black";
+  ctx.fillText("Score is: " + score, 20, 20);
   player.render(elapsedTime, ctx);
+  cars.forEach(function(car) {
+    car.render(elapsedTime, ctx);
+  });
 }
 
-},{"./game.js":2,"./player.js":3}],2:[function(require,module,exports){
+},{"./car.js":2,"./entity-manager.js":3,"./game.js":4,"./player.js":5}],2:[function(require,module,exports){
+"use stict";
+
+const MS_PER_FRAME = 1000/16;
+
+module.exports =  exports = Car;
+
+
+/**
+ * @constructor Player
+ * Creates a new player object
+ * @param {Postition} position object specifying an x and y
+ */
+function Car(position) {
+  this.state = "idle";
+  this.x = position.x;
+  this.y = position.y;
+  this.width  = 80;
+  this.height = 100;
+  this.spritesheet  = new Image();
+  this.spritesheet.src = encodeURI('assets/cars_mini.svg');
+  this.direction = {
+    up: true,
+    down: false,
+    left: false,
+    right: false
+  };
+  this.timer = 0;
+  this.frame = 0;
+}
+
+Car.prototype.update = function(time) {
+  this.timer += time;
+  if(this.timer > MS_PER_FRAME) {
+    if(this.y < -100){
+      this.y = 600;
+    }
+    else {
+      this.y -= 8;
+    }
+    this.timer = 0;
+  }
+}
+
+Car.prototype.render = function(time, ctx) {
+  ctx.drawImage(
+    this.spritesheet,
+     50, 0, this.width, this.height,
+    this.x, this.y, this.width, this.height
+  );
+}
+
+},{}],3:[function(require,module,exports){
+module.exports = exports = EntityManager;
+
+function EntityManager(width, height, cellSize) {
+  this.cellSize = cellSize;
+  this.widthInCells = Math.ceil(width / cellSize);
+  this.heightInCells = Math.ceil(height / cellSize);
+  this.cells = [];
+  this.numberOfCells = this.widthInCells * this.heightInCells;
+  for(var i = 0; i < this.numberOfCells; i++) {
+    this.cells[i] = [];
+  }
+  this.cells[-1] = [];
+}
+
+function getIndex(x, y) {
+  var x = Math.floor(x / this.cellSize);
+  var y = Math.floor(y / this.cellSize);
+  if(x < 0 ||
+     x >= this.widthInCells ||
+     y < 0 ||
+     y >= this.heightInCells
+  ) return -1;
+  return y * this.widthInCells + x;
+}
+
+EntityManager.prototype.addEntity = function(entity){
+  var index = getIndex.call(this, entity.x, entity.y);
+  this.cells[index].push(entity);
+  entity._cell = index;
+}
+
+EntityManager.prototype.updateEntity = function(entity){
+  var index = getIndex.call(this, entity.x, entity.y);
+  // If we moved to a new cell, remove from old and add to new
+  if(index != entity._cell) {
+    var cellIndex = this.cells[entity._cell].indexOf(entity);
+    if(cellIndex != -1) this.cells[entity._cell].splice(cellIndex, 1);
+    this.cells[index].push(entity);
+    entity._cell = index;
+  }
+}
+
+EntityManager.prototype.removeEntity = function(entity) {
+  var cellIndex = this.cells[entity._cell].indexOf(entity);
+  if(cellIndex != -1) this.cells[entity._cell].splice(cellIndex, 1);
+  entity._cell = undefined;
+}
+
+EntityManager.prototype.collide = function(callback) {
+  var self = this;
+  this.cells.forEach(function(cell, i) {
+    // test for collisions
+    cell.forEach(function(entity1) {
+      // check for collisions with cellmates
+      cell.forEach(function(entity2) {
+        if(entity1 != entity2) checkForCollision(entity1, entity2, callback);
+
+        // check for collisions in cell to the right
+        if(i % (self.widthInCells - 1) != 0) {
+          self.cells[i+1].forEach(function(entity2) {
+            checkForCollision(entity1, entity2, callback);
+          });
+        }
+
+        // check for collisions in cell below
+        if(i < self.numberOfCells - self.widthInCells) {
+          self.cells[i+self.widthInCells].forEach(function(entity2){
+            checkForCollision(entity1, entity2, callback);
+          });
+        }
+
+        // check for collisions diagionally below and right
+        if(i < self.numberOfCells - self.withInCells && i % (self.widthInCells - 1) != 0) {
+          self.cells[i+self.widthInCells + 1].forEach(function(entity2){
+            checkForCollision(entity1, entity2, callback);
+          });
+        }
+      });
+    });
+  });
+}
+
+function checkForCollision(entity1, entity2, callback) {
+  var collides = !(entity1.x + entity1.width < entity2.x ||
+                   entity1.x > entity2.x + entity2.width ||
+                   entity1.y + entity1.height < entity2.y ||
+                   entity1.y > entity2.y + entity2.height);
+  if(collides) {
+    callback(entity1, entity2);
+  }
+}
+
+EntityManager.prototype.renderCells = function(ctx) {
+  for(var x = 0; x < this.widthInCells; x++) {
+    for(var y = 0; y < this.heightInCells; y++) {
+      ctx.strokeStyle = '#333333';
+      ctx.strokeRect(x * this.cellSize, y * this.cellSize, this.cellSize, this.cellSize);
+    }
+  }
+}
+
+},{}],4:[function(require,module,exports){
 "use strict";
 
 /**
@@ -106,10 +346,10 @@ Game.prototype.loop = function(newTime) {
   this.frontCtx.drawImage(this.backBuffer, 0, 0);
 }
 
-},{}],3:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 "use strict";
 
-const MS_PER_FRAME = 1000/8;
+const MS_PER_FRAME = 100;
 
 /**
  * @module exports the Player class
@@ -128,7 +368,19 @@ function Player(position) {
   this.width  = 64;
   this.height = 64;
   this.spritesheet  = new Image();
-  this.spritesheet.src = encodeURI('assets/PlayerSprite2.png');
+  this.spritesheet.src = encodeURI('assets/PlayerSprite0.png');
+  this.input = {
+    up: false,
+    down: false,
+    left: false,
+    right: false
+  };
+  this.direction = {
+    up: false,
+    down: false,
+    left: false,
+    right: false
+  };
   this.timer = 0;
   this.frame = 0;
 }
@@ -145,7 +397,32 @@ Player.prototype.update = function(time) {
         this.timer = 0;
         this.frame += 1;
         if(this.frame > 3) this.frame = 0;
+        if(this.input.up || this.input.down || this.input.left || this.input.right) {
+          this.state="moving";
+          this.direction.up = this.input.up;
+          this.direction.down = this.input.down;
+          this.direction.left = this.input.left;
+          this.direction.right = this.input.right;
+          this.frame = 0;
+        }
       }
+      break;
+    case "moving":
+      this.timer += time;
+      if(this.timer > MS_PER_FRAME) {
+        this.timer = 0;
+        this.frame += 1;
+        if(this.direction.up) this.y -= 16;
+        else if (this.direction.down) this.y += 16;
+        else if (this.direction.right) this.x += 16;
+        else if (this.direction.left) this.x -= 16;
+        if(this.frame > 3) {
+          this.frame = 0;
+          this.state = "idle";
+        }
+      }
+      break;
+    default:
       break;
     // TODO: Implement your player's update by state
   }
@@ -169,6 +446,15 @@ Player.prototype.render = function(time, ctx) {
       );
       break;
     // TODO: Implement your player's redering according to state
+    case "moving":
+      ctx.drawImage(
+        this.spritesheet,
+        this.frame * 64, 0, this.width, this.height,
+        this.x, this.y, this.width, this.height
+      );
+      break;
+    default:
+      break;
   }
 }
 

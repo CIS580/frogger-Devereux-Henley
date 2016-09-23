@@ -1,6 +1,6 @@
 "use strict";
 
-const MS_PER_FRAME = 1000/8;
+const MS_PER_FRAME = 100;
 
 /**
  * @module exports the Player class
@@ -19,7 +19,19 @@ function Player(position) {
   this.width  = 64;
   this.height = 64;
   this.spritesheet  = new Image();
-  this.spritesheet.src = encodeURI('assets/PlayerSprite2.png');
+  this.spritesheet.src = encodeURI('assets/PlayerSprite0.png');
+  this.input = {
+    up: false,
+    down: false,
+    left: false,
+    right: false
+  };
+  this.direction = {
+    up: false,
+    down: false,
+    left: false,
+    right: false
+  };
   this.timer = 0;
   this.frame = 0;
 }
@@ -36,7 +48,32 @@ Player.prototype.update = function(time) {
         this.timer = 0;
         this.frame += 1;
         if(this.frame > 3) this.frame = 0;
+        if(this.input.up || this.input.down || this.input.left || this.input.right) {
+          this.state="moving";
+          this.direction.up = this.input.up;
+          this.direction.down = this.input.down;
+          this.direction.left = this.input.left;
+          this.direction.right = this.input.right;
+          this.frame = 0;
+        }
       }
+      break;
+    case "moving":
+      this.timer += time;
+      if(this.timer > MS_PER_FRAME) {
+        this.timer = 0;
+        this.frame += 1;
+        if(this.direction.up) this.y -= 16;
+        else if (this.direction.down) this.y += 16;
+        else if (this.direction.right) this.x += 16;
+        else if (this.direction.left) this.x -= 16;
+        if(this.frame > 3) {
+          this.frame = 0;
+          this.state = "idle";
+        }
+      }
+      break;
+    default:
       break;
     // TODO: Implement your player's update by state
   }
@@ -60,5 +97,14 @@ Player.prototype.render = function(time, ctx) {
       );
       break;
     // TODO: Implement your player's redering according to state
+    case "moving":
+      ctx.drawImage(
+        this.spritesheet,
+        this.frame * 64, 0, this.width, this.height,
+        this.x, this.y, this.width, this.height
+      );
+      break;
+    default:
+      break;
   }
 }
